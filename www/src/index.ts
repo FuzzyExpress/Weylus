@@ -101,6 +101,9 @@ function toggle_energysaving(energysaving: boolean) {
         } else
             settings.checks.get("enable_video").disabled = false;
     }
+    
+    // Update pointer event receiver to match new video dimensions
+    setTimeout(updatePointerEventReceiver, 100);
 }
 
 class Settings {
@@ -175,7 +178,7 @@ class Settings {
         };
 
         this.checks.get("enable_video").onchange = (e) => {
-            document.getElementById("video").classList.toggle("vanish", !(e.target as HTMLInputElement).checked);
+            document.getElementById("video-container").classList.toggle("vanish", !(e.target as HTMLInputElement).checked);
             document.getElementById("canvas").classList.toggle("vanish", (e.target as HTMLInputElement).checked);
             this.save_settings();
         }
@@ -272,7 +275,7 @@ class Settings {
                 this.checks.get("enable_video").checked = false;
                 if (this.checks.get("energysaving").checked)
                     this.checks.get("enable_video").disabled = true;
-                document.getElementById("video").classList.add("vanish");
+                document.getElementById("video-container").classList.add("vanish");
                 document.getElementById("canvas").classList.remove("vanish");
             }
 
@@ -942,13 +945,26 @@ function init(access_code: string, websocket_port: number) {
             settings.send_server_config();
     }
     video.controls = false;
-    video.onloadeddata = () => stretch_video();
+    video.onloadeddata = () => {
+        stretch_video();
+        // Add a small delay to ensure video dimensions are calculated correctly
+        setTimeout(updatePointerEventReceiver, 100);
+    }
+    
+    // Add a MutationObserver to update pointer-event-receiver when video changes
+    const observer = new MutationObserver(() => {
+        updatePointerEventReceiver();
+    });
+    
+    observer.observe(video, { 
+        attributes: true, 
+        attributeFilter: ['style', 'width', 'height']
+    });
 }
 
-// object-fit: fill; <-- this is unfortunately not supported on iOS, so we use the following
-// workaround
 function stretch_video() {
     const video = document.getElementById("video") as HTMLVideoElement;
+    const videoContainer = document.getElementById("video-container") as HTMLDivElement;
     const is_stretched = settings.stretched_video();
 
     if (navigator.userAgent.includes("iPad") || navigator.userAgent.includes("iPhone")) {
@@ -961,6 +977,25 @@ function stretch_video() {
         }
     } else {
         video.style.objectFit = is_stretched ? "fill" : "contain";
+    }
+    
+    // Update pointer-event-receiver to match video dimensions
+    updatePointerEventReceiver();
+}
+
+// Function to update the pointer event receiver to match video dimensions
+function updatePointerEventReceiver() {
+    const video = document.getElementById("video") as HTMLVideoElement;
+    const videoContainer = document.getElementById("video-container") as HTMLDivElement;
+    const pointerEventReceiver = document.getElementById("pointer-event-receiver") as HTMLDivElement;
+    
+    // Wait for video to be loaded
+    if (video.videoWidth && video.videoHeight) {
+        const rect = video.getBoundingClientRect();
+        pointerEventReceiver.style.width = rect.width + "px";
+        pointerEventReceiver.style.height = rect.height + "px";
+        pointerEventReceiver.style.left = rect.left + "px";
+        pointerEventReceiver.style.top = rect.top + "px";
     }
 }
 
